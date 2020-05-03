@@ -68,67 +68,53 @@ fn par_merge_sort(array: Vec<i32>) -> Vec<i32> {
         let (arr1, arr2) = rayon::join(
             || par_merge_sort(left),
             || par_merge_sort(right));
-        // let t1= pool.spawn_handle(lazy(|ctx | Ok::<_, ()>(par_merge_sort(left, pool))));
-        // let t2= pool.spawn_handle(lazy(|ctx | par_merge_sort(right, pool)));
-        // let arr1 = t1.wait().unwrap();
-        // let arr2 = t2.wait().unwrap();
-        // let sem1 = sem.clone();
-        // let sem2 = sem.clone();
-        // let t1: JoinHandle<Vec<i32>> = thread::spawn( || par_merge_sort(left, sem1));
-        // let t2: JoinHandle<Vec<i32>> = thread::spawn( || par_merge_sort(right, sem2));
-        // let arr1: Vec<i32> = t1.join().unwrap();
-        // let arr2: Vec<i32> = t2.join().unwrap();
         let res= merge(&arr1, &arr2);
         res
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>>  {
-    let len: i32 = 1_000_000;
-    let thread_number = 8;
-    let pool = ThreadPoolBuilder::new().num_threads(thread_number).build()?;
+fn test(times: i32, len: i32, psnum: usize) -> Result<(), Box<dyn std::error::Error>> {
     let mut rng: ThreadRng = rand::thread_rng();
     let v: Vec<i32> = (0..len).map(|_| {
         rng.gen_range(1, 101)
     }).collect();
+    let mut time_acc = Vec::<u128>::with_capacity( times as usize);
+    for _ in 0..times {
+        let start: Instant = Instant::now();
+        let start_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH).expect("Error");
+        seq_merge_sort(v.clone());
+        let end_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH).expect("Error");
+        let duration: Duration = start.elapsed();
+        let whole_time = end_time.as_millis() - start_time.as_millis();
+        time_acc.push(whole_time);
+    }
+    let seq_res = time_acc.iter().fold(0, |x, &y| x + y) / times as u128;
+    println!("{:?}", time_acc);
+    println!("[Seq] Taken time: {} ms", seq_res);
 
-    let start: Instant = Instant::now();
-    let start_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH).expect("Error");
-    seq_merge_sort(v.clone());
-    let end_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH).expect("Error");
-    let duration: Duration = start.elapsed();
-    let whole_time = end_time.as_millis() - start_time.as_millis();
-
-    println!("[Seq] Taken time: {} ms, ({:?})", whole_time, duration);
-
-    let start: Instant = Instant::now();
-    let start_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH).expect("Error");
-    pool.install(|| par_merge_sort(v));
-    let end_time = SystemTime::now()
-        .duration_since(UNIX_EPOCH).expect("Error");
-    let duration: Duration = start.elapsed();
-    let whole_time = end_time.as_millis() - start_time.as_millis();
-
-    println!("[Par] Taken time: {} ms, ({:?})", whole_time, duration);
-
-    // let rt: Runtime = tokio::runtime::Builder::new().threaded_scheduler().build().unwrap();
-    // let t = rt.spawn(async {
-    //         "hello world!"
-    // });
-    // let res = t.await?;
-    // println!("{}", res);
-    // Ok(())
-
-    // let join = tokio::task::spawn(async {
-    //     "hello world!"
-    // });
-    //
-    // let result = join.await?;
-    // print!("{}", result);
-
-
+    time_acc.clear();
+    let pool = ThreadPoolBuilder::new().num_threads(psnum).build()?;
+    for _ in 0..times {
+        let start: Instant = Instant::now();
+        let start_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH).expect("Error");
+        pool.install(|| par_merge_sort(v.clone()));
+        let end_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH).expect("Error");
+        let duration: Duration = start.elapsed();
+        let whole_time = end_time.as_millis() - start_time.as_millis();
+        time_acc.push(whole_time);
+    }
+    let par_res = time_acc.iter().fold(0, |x, &y| x + y) / times as u128;
+    println!("{:?}", time_acc);
+    println!("[Par] Taken time: {} ms", par_res);
     Ok(())
+}
+
+fn main() {
+    let len: i32 = 1000000;
+    let thread_number = 8;
+    test(10, len, thread_number);
 }
